@@ -13,8 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Load the Data
 ```{r}
-missing.values <- c("N/A","na","?","", "NaN", "not reported")
-data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na=missing.values)
+missing.values <- c("N/A","na","?","", "NaN", "not reported", "NA")
+data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 ```
 
 ### **We should give some information about data....**
@@ -33,6 +33,7 @@ Maybe we can show these fully nan columns in a fashionable way.
 ```{r}
 #install.packages("naniar")
 library(naniar)
+library(ggplot2)
 
 # Are there missing values in the dataset?
 any_na(data)
@@ -43,10 +44,61 @@ prop_miss(data)
 data %>% is.na() %>% colSums()
 
 
-#data_new <- data[ , colSums(is.na(data)) < nrow(data)]
-#summary(data_new)
+data_new <- data[ , colSums(is.na(data)) < nrow(data)]
+summary(data_new)
 
 ```
+
+Now let's take a closer look at to the missing values with tables.
+```{r}
+# Get number of missings per variable (n and %)
+miss_var_summary(data_new)
+#miss_var_table(data)
+
+```
+
+We can see the missing values with descending order in a more visualize version.
+```{r}
+# Which variables contain the most missing variables?
+gg_miss_var(data_new)
+```
+
+To get a better understanding whether or not the data are missing at random, we are going to visualize the locations of missing values across all variables.
+```{r}
+# Where are missings located?
+vis_miss(data_new) + theme(axis.text.x = element_text(angle=80))
+```
+
+**There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns**  
+- In *days_to_death* column values are NaN for **alive** patients and there is just information about **dead** patients how long they lived.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
