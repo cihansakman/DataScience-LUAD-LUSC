@@ -1,0 +1,78 @@
+---
+title: "LUAD"
+author: "Cihan"
+date: "27 12 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# DATA
+
+### Load the Data
+```{r}
+missing.values <- c("N/A","na","?","", "NaN", "not reported")
+data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na=missing.values)
+```
+
+### **We should give some information about data....**
+```{r cars}
+summary(data)
+```
+
+# PREPROCESSING
+
+## First we're going to drop the fully NaN columns. Because these columns are not useful for us.
+Maybe we can show these fully nan columns in a fashionable way.
+
+**we are going to get a rough glimpse on the missingness situation with the pretty neat naniar package**
+
+**Note:** we can go through https://towardsdatascience.com/smart-handling-of-missing-data-in-r-6425f8a559f2 and leave some comments for our dataset.
+```{r}
+#install.packages("naniar")
+library(naniar)
+
+# Are there missing values in the dataset?
+any_na(data)
+# How many?
+n_miss(data)
+prop_miss(data)
+# Which variables are affected?
+data %>% is.na() %>% colSums()
+
+
+#data_new <- data[ , colSums(is.na(data)) < nrow(data)]
+#summary(data_new)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
