@@ -34,6 +34,8 @@ Maybe we can show these fully nan columns in a fashionable way.
 #install.packages("naniar")
 library(naniar)
 library(ggplot2)
+library(dplyr)
+library(tidyverse)
 
 # Are there missing values in the dataset?
 any_na(data)
@@ -68,9 +70,138 @@ To get a better understanding whether or not the data are missing at random, we 
 # Where are missings located?
 vis_miss(data_new) + theme(axis.text.x = element_text(angle=80))
 ```
+**Note:** We can show the relationship between *days_to_last_follow_up* and *days_to_death* columns** that data is missing with the existence of other.
+
 
 **There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns**  
 - In *days_to_death* column values are NaN for **alive** patients and there is just information about **dead** patients how long they lived.
+- On the other hand, If there is a case like that if patient vital status is dead but days_to_death is 0. We'll drop that index.
+```{r}
+filter(data_new, days_to_death == 0 & vital_status == "dead")
+nrow(data_new)
+
+drop_rows <-subset(data_new, (vital_status=="dead" & days_to_death==0))
+nrow(drop_rows)
+
+data_new <- data_new[!data_new$submitter_id %in% drop_rows$submitter_id,]
+filter(data_new, days_to_death == 0 & vital_status == "dead")
+nrow(data_new)
+
+```
+
+As we can see we only have one patient with that situation in LUAD and we dropped that patient.
+
+- Now, Now we'll fill the NaN values in days_to_death column with the days_to_last_follow_up. Subsequently, we're going to drop the days_to_last_follow_up.
+```{r}
+data_new$days_to_death[is.na(data_new$days_to_death)] <- data_new$days_to_last_follow_up[is.na(data_new$days_to_death)]  # Replace NA values
+
+#Drop the days_to_last_follow_up.
+data_new <- subset(data_new, select = -c(days_to_last_follow_up))
+```
+
+- '''We can drop year_of_birth column because we already have days_to_birth which is more suitable for our algorithm'''
+- '''In 'state' column all the variables are same for all rows as 'released'. We'll drop it'''
+- '''Drop updated_datetime because there is no special information about patient status'''(We don't have to prove it with table or plot it's just not useful)
+- '''Also we should remove the ids. Because there is nothing special for these ids. These are just random variables.'''
+  - id_columns = {"diagnosis_id", "exposure_id", "demographic_id", "treatment_id", "bcr_patient_barcode"}
+- 76% of the year_of_death column is missing. We're going to drop that column because we already have the information of days_to_death which refers to information of lifetime of the patient before dying. 
+
+**Note:** We should show that with a nice plot or table.
+```{r}
+data_new <- subset(data_new, select = -c(year_of_birth, state, updated_datetime, diagnosis_id, exposure_id, demographic_id, treatment_id, bcr_patient_barcode, year_of_death))
+```
+
+
+## Missing Value Imputations
+
+#### Now we will fill the numeric NaN variables with the mean of columns.
+
+- numeric_columns = {"age_at_diagnosis", "days_to_birth","years_smoked","cigarettes_per_day"}
+**Note:** We can show the missing values with dot plot and after imputing the data we can do the same thing again for all 4 features.
+**Note:** We can also try to fill the missing values after splitting test and train data and impute the missing values seperately for test and train data.
+```{r}
+## Try to do the same operation with less code. Try sth fancy.
+data_new$age_at_diagnosis[is.na(data_new$age_at_diagnosis)] <- mean(data_new$age_at_diagnosis, na.rm = TRUE)
+data_new$days_to_birth[is.na(data_new$days_to_birth)] <- mean(data_new$days_to_birth, na.rm = TRUE)
+data_new$years_smoked[is.na(data_new$years_smoked)] <- mean(data_new$years_smoked, na.rm = TRUE)
+data_new$cigarettes_per_day[is.na(data_new$cigarettes_per_day)] <- mean(data_new$cigarettes_per_day, na.rm = TRUE)
+
+# Which variables contain the most missing variables?
+gg_miss_var(data_new)
+```
+
+We can see that we successfully imputed these features with mean of the features.
+Think about why do we still have missing values on days_to_death and tumor_stage...(#There are still some NaN values in 'tumor_stage' and 'days_to_death'. We'll drop them)
+
+## 211. bloktan devam.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
