@@ -9,6 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+#LIBRARIES
+We first load necessary libraries
+```{r}
+#install.packages("naniar")
+#install.packages("superml")
+library(naniar)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(corrplot)
+library(superml) #Label Encoding
+library(caret) #dummyVars for One Hot Encoding
+```
+
+
 # DATA
 
 ### Load the Data
@@ -20,6 +35,7 @@ data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Fina
 ### **We should give some information about data....**
 ```{r cars}
 summary(data)
+str(data) #Types of features
 ```
 
 # PREPROCESSING
@@ -31,12 +47,6 @@ Maybe we can show these fully nan columns in a fashionable way.
 
 **Note:** we can go through https://towardsdatascience.com/smart-handling-of-missing-data-in-r-6425f8a559f2 and leave some comments for our dataset.
 ```{r}
-#install.packages("naniar")
-library(naniar)
-library(ggplot2)
-library(dplyr)
-library(tidyverse)
-
 # Are there missing values in the dataset?
 any_na(data)
 # How many?
@@ -100,7 +110,7 @@ data_new <- subset(data_new, select = -c(days_to_last_follow_up))
 ```
 
 - '''We can drop year_of_birth column because we already have days_to_birth which is more suitable for our algorithm'''
-- '''In 'state' column all the variables are same for all rows as 'released'. We'll drop it'''
+- '''In 'state' column all the variables are same for all rows as 'released'. We'll drop it''' (*SHOW THAT*)
 - '''Drop updated_datetime because there is no special information about patient status'''(We don't have to prove it with table or plot it's just not useful)
 - '''Also we should remove the ids. Because there is nothing special for these ids. These are just random variables.'''
   - id_columns = {"diagnosis_id", "exposure_id", "demographic_id", "treatment_id", "bcr_patient_barcode"}
@@ -112,13 +122,14 @@ data_new <- subset(data_new, select = -c(year_of_birth, state, updated_datetime,
 ```
 
 
+
 ## Missing Value Imputations
 
 #### Now we will fill the numeric NaN variables with the mean of columns.
 
 - numeric_columns = {"age_at_diagnosis", "days_to_birth","years_smoked","cigarettes_per_day"}
 **Note:** We can show the missing values with dot plot and after imputing the data we can do the same thing again for all 4 features.
-**Note:** We can also try to fill the missing values after splitting test and train data and impute the missing values seperately for test and train data.
+**Note:** We can also try to fill the missing values after splitting test and train data and impute the missing values separately for test and train data.
 ```{r}
 ## Try to do the same operation with less code. Try sth fancy.
 data_new$age_at_diagnosis[is.na(data_new$age_at_diagnosis)] <- mean(data_new$age_at_diagnosis, na.rm = TRUE)
@@ -131,24 +142,144 @@ gg_miss_var(data_new)
 ```
 
 We can see that we successfully imputed these features with mean of the features.
-Think about why do we still have missing values on days_to_death and tumor_stage...(#There are still some NaN values in 'tumor_stage' and 'days_to_death'. We'll drop them)
+
+- '''Now we have null values in **ethnicity** and **race** columns. These columns are highly related with cancer genetic we will keep them as unknown'''
+```{r}
+ 
+head(data_new)
+
+data_new <- data_new %>%
+    mutate(ethnicity = if_else(is.na(ethnicity), "unknown", ethnicity))
+data_new <- data_new %>%
+    mutate(race = if_else(is.na(race), "unknown", race))
+
+head(data_new)
+```
+
+  - We can show the new distribution of the **ethnicity** and **race** columns in a plot.
+```{r}
+p1 <- ggplot(data_new, aes(x=reorder(ethnicity, ethnicity, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Ethnicity', y="")
+p2 <- ggplot(data_new, aes(x=reorder(race, race, function(x)-length(x)))) +
+geom_bar(fill='purple') +  labs(x='Race', y="")
+
+require(gridExtra)
+grid.arrange(p1, p2, nrow=2)
+
+
+```
+
+
+
+(#There are still some NaN values in 'tumor_stage'(8) and 'days_to_death'(9). We'll drop them)
+```{r}
+sapply(data_new,function(x) sum(is.na(x)))
+vars <- c("tumor_stage", "days_to_death")
+data_new <- data_new %>% drop_na(vars, any_of(vars))
+sapply(data_new,function(x) sum(is.na(x)))
+```
+
+As we can see, we don't have any null values in the dataset anymore.
+```{r}
+gg_miss_var(data_new)
+```
+
 
 ## 211. bloktan devam.
 
 
+#### It seems that tissue_or_organ_of_origin and site_of_resection_or_biopsy are identical features. We will make sure and if they are identical we'll drop one of them''' (We can improve that part and we can show the identification better.)
+```{r}
+ifelse(data_new$tissue_or_organ_of_origin==data_new$site_of_resection_or_biopsy,"Yes","No")
+data_new <- subset(data_new, select = -c(tissue_or_organ_of_origin))
+```
 
 
 
+## ENCODING
+
+- We're going to convert our String Binary columns into Numeric Binary columns with LabelEncdoing. But first we're going to convert these three Character features into Factor.
+  - Our Binary String Columns are: vital_status, gender, disease
+```{r}
+
+data_new$vital_status <- as.factor(data_new$vital_status) 
+data_new$gender <- as.factor(data_new$gender) 
+data_new$disease <- as.factor(data_new$disease) 
+
+head(data_new)
+
+label <- LabelEncoder$new()
+data_new$vital_status <- label$fit_transform(data_new$vital_status) #0:Alive, 1:Dead
+data_new$gender <- label$fit_transform(data_new$gender) #1:Male, 0:Female
+data_new$disease <- label$fit_transform(data_new$disease) #We're going to drop it.
+
+head(data_new)
+```
+- **tumor_stage** is an ordinal column. We'll encode it manuelly. We can get the unique values for the feature and show them.
+  - The order is going to be as follows:
+    - tumor_stage_map = {'stage i': 1, 'stage ia': 2, 'stage ib': 3, 'stage ii': 4, 'stage iia': 5, 'stage iib': 6, 'stage iiia':7, 'stage iiib':8, 'stage iv':9 }
+
+```{r}
+head(data_new)
+p1 <- ggplot(data_new, aes(x=reorder(tumor_stage, tumor_stage, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Tumor Stages', y="")
+p1
+
+
+data_new$tumor_stage <- as.numeric(as.factor(data_new$tumor_stage))
+
+
+str(data_new$tumor_stage)
+typeof(data_new$tumor_stage)
+head(data_new)
+```
 
 
 
+- We'll apply OneHotEncoding for Nominal Columns with **dummyVars** function in the *caret* package.
+  - Our categorical columns are: **primary_diagnosis, morphology, site_of_resection_or_biopsy, race, ethnicity**
+```{r}
+categorical.cols <- subset(data_new, select=c(primary_diagnosis, morphology, site_of_resection_or_biopsy, race, ethnicity))
+head(categorical.cols)
+
+dmy <- dummyVars(" ~ .", data = categorical.cols)
+categorical.cols <- data.frame(predict(dmy, newdata = categorical.cols))
+head(categorical.cols)
+```
+
+  - We'll drop categorical columns and then we'll merge the new One Hot Encoded version of categrical.cols to the dataset.
+```{r}
+categorical.cols$submitter_id <- data_new$submitter_id #We need that submitter_id column to merge two dataframes.
+data_new <- subset(data_new, select = -c(primary_diagnosis, morphology, site_of_resection_or_biopsy, race, ethnicity))
+data_new <- merge(data_new, categorical.cols, by="submitter_id")
+```
+  
+  
+- Drop vital_status(alive or dead) and disease. In real life we don't need vital_status feature. On the other hand **disease** stands for type of Lung Cancer(LUAD or LUSC) in our case all the patients are LUAD cancer, therefore we don't need to keep that column. Also we do not need **submitter_id** feature any more.
+```{r}
+data_new <- subset(data_new, select = -c(vital_status, disease, submitter_id))
+```
 
 
 
+## Classifiyng Algorithm
 
+We would like to classify the patients such as they will live more than five years or not according to their **days_to_death** feature. Therefore, if the patient's remaining life more than 5 years we assumed the patient will live long(assign 1), otherwise short(assign 0). Then convert it to the factor.
+```{r}
+head(data_new)
+data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 1, 0)
+data_new$days_to_death <- as.factor(data_new$days_to_death)
+head(data_new)
+str(data_new)
+```
 
-
-
+## Let's see if we have a balanced classes or not.
+```{r}
+p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes', y="")
+p1
+```
+It seems that we have a serious imbalance class classification problem. 
 
 
 
