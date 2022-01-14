@@ -31,9 +31,9 @@ library(caret) #dummyVars for One Hot Encoding
 ```{r}
 missing.values <- c("N/A","na","?","", "NaN", "not reported", "NA")
 
-data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+#data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
-#data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
 ```
 
@@ -163,8 +163,8 @@ From the above plot, again we can see presence of some values that related with 
 In the code below we'll drop the row, if there is a case like that if patient vital status is dead but days_to_death is 0.
 As we can see we only have one patient with that situation in LUAD and we dropped that patient.
 ```{r}
-paste("Before Missing value imputation we're going to keep the data with missing values as 'data_new_w_missing_values'")
-data_new_w_missing_values <- data_new
+paste("Before Missing value imputation we're going to keep the data with missing values as 'data_new_w_na'")
+data_w_na <- data_new
 
 
 filter(data_new, days_to_death == 0 & vital_status == "dead")
@@ -372,14 +372,12 @@ data_new <- merge(data_new, categorical.cols, by="submitter_id")
 data_new <- subset(data_new, select = -c(vital_status, disease, submitter_id))
 ```
 
-
-
 ## Classifiyng Algorithm
 
-We would like to classify the patients such as they will live more than five years or not according to their **days_to_death** feature. Therefore, if the patient's remaining life more than 5 years we assumed the patient will live long(assign 1), otherwise short(assign 0). Then convert it to the factor.
+We would like to classify the patients such as they will live more than five years or not according to their *days_to_death* feature. Therefore, if the patient's remaining life more than 5 years we assumed the patient will live long(assign 1), otherwise short(assign 0). Then convert it to the factor.
 ```{r}
 head(data_new)
-data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 1, 0)
+data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 'low risk', 'high risk')
 data_new$days_to_death <- as.factor(data_new$days_to_death)
 head(data_new)
 str(data_new)
@@ -387,9 +385,10 @@ str(data_new)
 
 
 
+
 ## Z.a) Imbalance Check
 
-## Let's see if we have a balanced classes or not for the target data(**days_to_death**).
+## Let's see if we have a balanced classes or not for the target data(*days_to_death*).
 ```{r}
 p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
 geom_bar(fill='orange') +  labs(x='Classes', y="")
@@ -397,60 +396,175 @@ p1
 ```
 Before applying Oversampling algorithm to data let's first split the data into two parts, train(%80) and test(%20) dataset.
 ```{r}
-set.seed(123)
-samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
+set.seed(12345)
+#samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
-train  <- data_new[samples, ]
-test <- data_new[-samples, ]
+#train  <- data_new[samples, ]
+#test <- data_new[-samples, ]
 
-paste("Size of training set:",nrow(train),",",ncol(train))
-paste("Size of test set:",nrow(test),",",ncol(test))
-
-
+#paste("Size of training set:",nrow(train),",",ncol(train))
+#paste("Size of test set:",nrow(test),",",ncol(test))
 ```
-
 
 
 It seems that we have a serious imbalance class classification problem. We're going to use the SMOTE algorithm, the SMOTE is an oversampling technique which synthesizes a new minority instance between a pair of one minority instance and one of its K nearest neighbor.
 ```{r}
-#install.packages("smotefamily")
-library(smotefamily)
+paste("We're going to keep the imbalance data as 'imbalance_data' and 'data_new' is going to be our balanced data.")
 
-paste("We're going to keep the imbalance data as 'train_imbalance' and 'test_imbalance'")
-
-train_imbalance <- train
-test_imbalance <- test
-
-train <- SMOTE(subset(train, select = -c(days_to_death)),subset(train, select = c(days_to_death)),K=5)
-train <- train$data
-
-test <- SMOTE(subset(test, select = -c(days_to_death)),subset(test, select = c(days_to_death)),K=5)
-test <- test$data
+imbalance_data <- data_new
 
 
-names(train)[names(train) == 'class'] <- 'days_to_death'
-names(test)[names(test) == 'class'] <- 'days_to_death'
+data_new <- SMOTE(subset(data_new, select = -c(days_to_death)),subset(data_new, select = c(days_to_death)),K=5)$data
 
-p1 <- ggplot(train, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Train Data")
-p2 <- ggplot(test, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Test Data")
-require(gridExtra)
-grid.arrange(p1, p2, nrow=2)
+
+
+names(data_new)[names(data_new) == 'class'] <- 'days_to_death'
+
+
+p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Balanced Data")
+p1
 ```
 After applying SMOTE now we have a balanced data. 
 
+## 5) PCA
+First, we apply PCA keeping all components equal to the original number of dimensions and see how well PCA captures the variance of our data.
+```{r}
+X_data <- subset(data_new, select = -c(days_to_death))
+y_data <- subset(data_new, select = c(days_to_death)) # our target
+
+#Now we can apply PCA:
+X_data_pca <- prcomp(X_data,center = TRUE, scale. = TRUE)
+summary(X_data_pca)
+
+#We are going to apply same step for X test:
+#which(apply(X.test, 2, var)==0)
+#X.test <- X.test[ , which(apply(X.test, 2, var) != 0)]
+#X.test.pca <- prcomp(X.test,center = TRUE, scale. = TRUE)
+
+```
+
+Because the point of PCA is to significantly reduce the number of variables, we want to use the smallest number of principal components possible to explain most of the variability.
+
+The most common technique for determining how many principal components to keep is eyeballing the scree plot. In a scree plot the ‘arm-bend’ represents a decrease in cumulative contribution also it show the percentage of variances explained by each principal component.
+```{r}
+screeplot(X_data_pca, type = "l", npcs = 25)
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+
+```
+The above plot shows the bend at the eighteenth principal component, it is useful to decide how many PCs to retain for further analysis. In this case we have 18 PCs and we can see that the first 18 PCs explain most of the variability in the data.
+
+```{r}
+cumpro <- cumsum(X_data_pca$sdev^2 / sum(X_data_pca$sdev^2))
+plot(cumpro[0:30], xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative Variance")
+abline(v = 20, col="blue", lty=5)
+abline(h = 0.89271, col="blue", lty=5)
+legend("topleft", legend=c("Cut-off @ PC6"),
+       col=c("blue"), lty=5, cex=0.6)
+```
+From above plot we can see that nearly with 20 PCs we can explain %89.271 of total variance.
+
+Let's see the importance of first 20 PCs out of 42:
+```{r}
+X_data_pca_20 <- prcomp(subset(X_data), center = TRUE, scale = TRUE, rank.= 20)
+summary(X_data_pca_20)
+```
+
+```{r}
+M <-cor(X_data_pca_20$x)
+corrplot(M, method = "color", addCoef.col="brown", order = "FPC", number.cex=0.9, 
+         tl.cex=0.7, tl.col = "brown", tl.srt = 90)
+
+```
+```{r}
+transformed_data<- cbind(X_data_pca_20$x,y_data)
+head(transformed_data)
+```
+## 6) LOGISTIC REGRESSION
+```{r}
+training_samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
 
+data_new$days_to_death <- ifelse(data_new$days_to_death == "low risk", 0, 1)
+data_new$days_to_death <- as.factor(data_new$days_to_death)
+
+train_data  <- data_new[training_samples, ]
+test_data <- data_new[-training_samples, ]
+
+model <- glm(days_to_death ~.,family=binomial,data=train_data)
+
+fitted.results <- predict(model,subset(test_data,select=-c(days_to_death)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != test_data$days_to_death)
+
+print(paste('Test Accuracy:',1-misClasificError))
+
+```
 
 
+## 6.X) LOGISTIC REGRESSION WTIH PCA(*Galiba çalışmıyor kontrol et*)
+
+We transform original data to the apllied pca data then split it into train and test set in order to apply logistic regression.
+```{r}
+training_samples_pca <- transformed_data$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
 
+transformed_data$days_to_death <- ifelse(transformed_data$days_to_death == "low risk", 0, 1)
+transformed_data$days_to_death <- as.factor(transformed_data$days_to_death)
+
+train_data_pca  <- transformed_data[training_samples_pca, ]
+test_data_pca <- transformed_data[-training_samples_pca, ]
+
+#Now we can build our linear regression model with our new data
+model_pca <- glm(days_to_death ~.,family=binomial,data=train_data_pca)
+
+fitted_results <- predict(model_pca,subset(test_data_pca,select=-c(days_to_death)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != test_data_pca$days_to_death)
+
+print(paste('Test Accuracy:',1-misClasificError))
+```
+
+## 6.Y.b) LOGISTIC REGRESSION WTIH MISSING VALUES (*ERROR*)
+```{r}
+training_samples_missing <- data$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
 
+train_data_missing  <- data[training_samples_missing, ]
+test_data_missing <- data[-training_samples_missing, ]
+
+model_imbalance <- glm(days_to_death ~.,family=binomial,data=train_data_missing)
+
+fitted_results <- predict(model_imbalance,subset(test_data_missing,select=-c(days_to_death)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != test_data_missing$days_to_death)
+
+print(paste('Test Accuracy:',1-misClasificError))
+
+```
+
+## 6.Z.b) LOGISTIC REGRESSION WTIH IMBALANCED
+```{r}
+training_samples_imbalance <- imbalance_data$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
 
+imbalance_data$days_to_death <- ifelse(imbalance_data$days_to_death == "low risk", 0, 1)
+imbalance_data$days_to_death <- as.factor(imbalance_data$days_to_death)
 
+train_data_imbalance  <- imbalance_data[training_samples_imbalance, ]
+test_data_imbalance <- imbalance_data[-training_samples_imbalance, ]
+
+model_imbalance <- glm(days_to_death ~.,family=binomial,data=train_data_imbalance)
+
+fitted_results <- predict(model_imbalance,subset(test_data_imbalance,select=-c(days_to_death)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != test_data_imbalance$days_to_death)
+
+print(paste('Test Accuracy:',1-misClasificError))
+
+```
 
 
 
