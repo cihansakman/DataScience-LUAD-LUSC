@@ -16,6 +16,9 @@ We first load necessary libraries
 #install.packages("cowplot") 
 #install.packages("superml")
 #install.packages("VIM")
+#install.packages("smotefamily")
+library(smotefamily)
+library(cluster)
 library(VIM)
 library(naniar)
 library(ggplot2)
@@ -379,7 +382,7 @@ data_new <- subset(data_new, select = -c(vital_status, disease, submitter_id))
 We would like to classify the patients such as they will live more than five years or not according to their **days_to_death** feature. Therefore, if the patient's remaining life more than 5 years we assumed the patient will live long(assign 1), otherwise short(assign 0). Then convert it to the factor.
 ```{r}
 head(data_new)
-data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 1, 0)
+data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 'low risk', 'high risk')
 data_new$days_to_death <- as.factor(data_new$days_to_death)
 head(data_new)
 str(data_new)
@@ -398,13 +401,13 @@ p1
 Before applying Oversampling algorithm to data let's first split the data into two parts, train(%80) and test(%20) dataset.
 ```{r}
 set.seed(123)
-samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
+#samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
-train  <- data_new[samples, ]
-test <- data_new[-samples, ]
+#train  <- data_new[samples, ]
+#test <- data_new[-samples, ]
 
-paste("Size of training set:",nrow(train),",",ncol(train))
-paste("Size of test set:",nrow(test),",",ncol(test))
+#paste("Size of training set:",nrow(train),",",ncol(train))
+#paste("Size of test set:",nrow(test),",",ncol(test))
 
 
 ```
@@ -413,33 +416,83 @@ paste("Size of test set:",nrow(test),",",ncol(test))
 
 It seems that we have a serious imbalance class classification problem. We're going to use the SMOTE algorithm, the SMOTE is an oversampling technique which synthesizes a new minority instance between a pair of one minority instance and one of its K nearest neighbor.
 ```{r}
-#install.packages("smotefamily")
-library(smotefamily)
+paste("We're going to keep the imbalance data as 'imbalance_data' and 'data_new' is going to be our balanced data.")
 
-paste("We're going to keep the imbalance data as 'train_imbalance' and 'test_imbalance'")
-
-train_imbalance <- train
-test_imbalance <- test
-
-train <- SMOTE(subset(train, select = -c(days_to_death)),subset(train, select = c(days_to_death)),K=5)
-train <- train$data
-
-test <- SMOTE(subset(test, select = -c(days_to_death)),subset(test, select = c(days_to_death)),K=5)
-test <- test$data
+imbalance_data <- data_new
 
 
-names(train)[names(train) == 'class'] <- 'days_to_death'
-names(test)[names(test) == 'class'] <- 'days_to_death'
+data_new <- SMOTE(subset(data_new, select = -c(days_to_death)),subset(data_new, select = c(days_to_death)),K=5)
+data_new <- data_new$data
 
-p1 <- ggplot(train, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Train Data")
-p2 <- ggplot(test, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Test Data")
-require(gridExtra)
-grid.arrange(p1, p2, nrow=2)
+names(data_new)[names(data_new) == 'class'] <- 'days_to_death'
+
+p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Balanced Data")
+p1
 ```
 After applying SMOTE now we have a balanced data. 
 
+***
+
+## *7)* Clustering Algorithms
+
+- *a)* Clustering is powerful technique when it's about unsupervised learning. Some of the clustering algorithms directly clusters the data points without any given information but some of them need to have the information of number of clusters. In order to show the difference between these two type clustering we're going to apply K-means and Hierarchical Clustering Algorithms. 
+
+- *7.1)* KNN Clustering
+
+Let's first try to show the distribution of the days_to_death using **cigarettes_per_day** and **years_smoked**
+```{r}
+cigarettes.per.day <- data_new$cigarettes_per_day
+years.smoked <- data_new$years_smoked
+ggplot(data_new, aes(cigarettes.per.day, years.smoked, color = days_to_death)) + geom_point()
+```
+Due to we imputed to null values with mean values of the feature in **years_smoked** there is a line on the middle of the y-axis. When we look at the above plot and try to find a pattern, it could be a little bit hard but we can say that high-risk patients spread wider than low-risk patients. But clustering algorithms will suffer to identify the clusters. Let's try it.
+
+We are going to assign the # of clusters to 2 to identify the **high risk** and **low risk** patients.
+
+- We’re going to seperate the target(days_to_death) before applying k-means.
+```{r}
+x_data <- subset(data_new, select = -c(days_to_death))
+y_data <- subset(data_new, select = c(days_to_death))
+
+kmeans_data <- kmeans(x_data, center=2, nstart=30)
+kmeans_data$centers
+```
+- Now let's compare the predicted values and actual values
+```{r}
+#install.packages("cvms")
+library(cvms)
+library(factoextra)
+
+table(kmeans_data$cluster, y_data$days_to_death)
+
+```
+**Note**: As we can see from the above clustering algorithms didn't predict well. For the low risk, the algorithm almost has 50% accuracy and it means nothing for the Machine Learning algorithm. Rather than using that algorithm we can just flip a coin and decide whether it's low or high risk.
+
+- *7.2)* HIERARCHICAL CLUSTERING(HC)
+
+```{r}
+#Agglomerative hierarchical clustering (HC)---hclust function
+distance <- dist(subset(data_new, select = -c(days_to_death)), method="euclidean") 
+#Elbow method can also be used here
+fviz_nbclust(subset(data_new, select = -c(days_to_death)), FUN = hcut, method = "wss")
+
+```
+
+```{r}
+hier <- hclust(distance, method="average")
+plot(hier,  xlab="", sub=" ") 
+rect.hclust(hier, k=3, border="red")
+```
+
+```{r}
+hier_cut <- cutree(hier, 2)
+table(predicted=hier_cut, true=data_new$days_to_death)
+```
+```{r}
+hier_cut <- cutree(hier, 3)
+table(predicted=hier_cut, true=data_new$days_to_death)
+```
 
 
 
