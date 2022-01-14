@@ -87,7 +87,6 @@ data %>% is.na() %>% colSums()
 ```
 
 ```{r}
-
 # Drop full NA variables and append the new data frame to the data_new
 data_new <- data[ , colSums(is.na(data)) < nrow(data)]
 # Take a look our new dataframe
@@ -164,6 +163,10 @@ From the above plot, again we can see presence of some values that related with 
 In the code below we'll drop the row, if there is a case like that if patient vital status is dead but days_to_death is 0.
 As we can see we only have one patient with that situation in LUAD and we dropped that patient.
 ```{r}
+paste("Before Missing value imputation we're going to keep the data with missing values as 'data_new_w_missing_values'")
+data_new_w_missing_values <- data_new
+
+
 filter(data_new, days_to_death == 0 & vital_status == "dead")
 nrow(data_new)
 
@@ -386,19 +389,32 @@ str(data_new)
 
 ## Z.a) Imbalance Check
 
-## Let's see if we have a balanced classes or not.
+## Let's see if we have a balanced classes or not for the target data(**days_to_death**).
 ```{r}
 p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
 geom_bar(fill='orange') +  labs(x='Classes', y="")
 p1
 ```
-It seems that we have a serious imbalance class classification problem. 
+It seems that we have a serious imbalance class classification problem. We're going to use the SMOTE algorithm, the SMOTE is an oversampling technique which synthesizes a new minority instance between a pair of one minority instance and one of its K nearest neighbor.
 ```{r}
-install.packages('DMwR')
-library(DMwR)
-data_new.imb <- SMOTE(days_to_death ~ ., data_new, perc.over = 100, perc.under=200)
-data_new.imb$days_to_death <- as.numeric(data_new.imb$days_to_death)
+#install.packages("smotefamily")
+library(smotefamily)
+
+paste("We're going to keep the imbalance data as 'data_new_imbalance'")
+
+data_new_imbalance <- data_new
+
+data_new <- SMOTE(subset(data_new, select = -c(days_to_death)),subset(data_new, select = c(days_to_death)),K=5)
+data_new <- data_new$data
+
+names(data_new)[names(data_new) == 'class'] <- 'days_to_death'
+
+p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count")
+p1
 ```
+After applying SMOTE now we have a balanced data. 
+
 
 
 
