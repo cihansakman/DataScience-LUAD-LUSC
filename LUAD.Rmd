@@ -31,13 +31,13 @@ library(caret) #dummyVars for One Hot Encoding
 ```{r}
 missing.values <- c("N/A","na","?","", "NaN", "not reported", "NA")
 
-#data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
-data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+#data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
 ```
 
-### **We should give some information about data....**
+## 1.2.3) Data Analysis and Visualization **We should give some information about data....**
 ```{r cars}
 summary(data)
 ```
@@ -120,7 +120,7 @@ vis_miss(data_new) + theme(axis.text.x = element_text(angle=80))
 ```
 We can see where the missing values are “clustered” and it seems to match our findings from our previous overview on the presence of missing values per variable.
 
-We can see that the presence of some values in some variables coincides with the absence of others. We can see the *days_to_last_follow_up* and *days_to_death* columns** that are an example of missing with the existence of others.
+We can see that the presence of some values in some variables coincides with the absence of others. We can see the *days_to_last_follow_up* and *days_to_death* columns that are an example of missing with the existence of others.
 
 Now is the presence of some values are related with missingness in other variables? Let’s find out.
 
@@ -131,17 +131,15 @@ The results are compatible with the observation that there is a substantial numb
 
 From above result we can say that **There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns**. Of course, there are other variables that meet this condition. But the binary that stood out compared to the numeric values was *days_to_last_follow_up* and *days_to_death*.
 
+Before doing anything to missing values, we need to know the pattern of occurrence of missing values. The most effective way to do this is to draw a plot.
 
-Before doing anything to missing values, we need to know the pattern of occurrence of missing values.The most effective way to do this is to draw a plot.
-
-In order to examine the pattern between the variables containing the missing value by drawing a plot, let's take only the variables with missing values from all the variables
-
+In order to examine the pattern between the variables containing the missing value by drawing a plot, let's take only the variables with at least one missing value from all the variables
 ```{r}
-#columns_with_na<-names(which(colSums(is.na(data_new)) > 0))
+columns_with_na<-names(which(colSums(is.na(data_new)) > 0))
 #columns_with_na
 
 data_w_na <- subset(data_new, select = c(columns_with_na))
-data_w_na
+head(data_w_na)
 ```
 
 Here first we change the variable name of *days_to_last_follow_up* to *days_to_lfu* in order to fit the name in the plot. This variable gives us information about how long alive people have their check-in and there is no information about the dead patients.
@@ -150,50 +148,54 @@ Here first we change the variable name of *days_to_last_follow_up* to *days_to_l
 names(data_w_na)[names(data_w_na) == 'days_to_last_follow_up'] <- 'days_to_lfu'
 ```
 
-The missing patterns can be visualized using VIM package.
+The missing patterns can be visualized using VIM package's **aggr** function.
 
 ```{r}
-
-
 aggr(data_w_na, col=c('lightblue','red'),  sortVars=TRUE, labels=names(data_w_na), cex.axis=.5, gap=3, ylab=c("Histogram of missing data","Pattern"))
-
-
 
 ```
 The histogram shows the proportion of missingness and the plot on the right gives the frequencies for different combinations of variables missing where. Blue refers to observed data and red to missing data.
 
 From the above plot, again we can see presence of some values that related with missingness in other variables.
 
------------------------
+***
+## Y.a) Missing Value Imputations
 
-In the code below we'll drop the index, if there is a case like that if patient vital status is dead but days_to_death is 0.
-
-Because as we mentioned above **There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns** 
-
-Also, in *days_to_death* column values are NaN for **alive** patients and there is just information about **dead** patients how long they lived.
-
+In the code below we'll drop the row, if there is a case like that if patient vital status is dead but days_to_death is 0.
+As we can see we only have one patient with that situation in LUAD and we dropped that patient.
 ```{r}
 filter(data_new, days_to_death == 0 & vital_status == "dead")
 nrow(data_new)
 
 drop_rows <-subset(data_new, (vital_status=="dead" & days_to_death==0))
-nrow(drop_rows)
+c <-nrow(drop_rows)
+paste("Count of patient with vital status is dead but days_to_death is 0 is:", c)
 
 data_new <- data_new[!data_new$submitter_id %in% drop_rows$submitter_id,]
 filter(data_new, days_to_death == 0 & vital_status == "dead")
 nrow(data_new)
 
+
 ```
 
-As we can see we only have one patient with that situation in LUAD and we dropped that patient.
+As we mentioned above **There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns** but let's take a closer look to their relationship.
 
+```{r}
+to.death.vs.last.follow.up <- subset(data_new, select = c(days_to_last_follow_up,days_to_death))
+aggr(to.death.vs.last.follow.up, col=c('lightblue','red'),  sortVars=TRUE, numbers=TRUE, cex.numbers=0.9,labels=names(to.death.vs.last.follow.up), cex.axis=.5, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+From above plot we can say that the 63.1% of the missing values in **days_to_death** is present in **days_to_last_follow_up** and 22.5% of the missing values in **days_to_last_follow_up** is present in **days_to_death**. 
 - Now, Now we'll fill the NaN values in days_to_death column with the days_to_last_follow_up. Subsequently, we're going to drop the days_to_last_follow_up.
 ```{r}
 data_new$days_to_death[is.na(data_new$days_to_death)] <- data_new$days_to_last_follow_up[is.na(data_new$days_to_death)]  # Replace NA values
 
 #Drop the days_to_last_follow_up.
 data_new <- subset(data_new, select = -c(days_to_last_follow_up))
+gg_miss_upset(data_new)
 ```
+As we can see we successfully merge these two features.
+
+***
 
 - '''We can drop year_of_birth column because we already have days_to_birth which is more suitable for our algorithm'''
 
@@ -204,12 +206,6 @@ data_new <- subset(data_new, select = -c(days_to_last_follow_up))
 unique_data <- data_new %>% summarise_each(funs(n_distinct))
 unique_data
 ```
-
-```{r}
-
-```
-
-
 
 - '''Drop updated_datetime because there is no special information about patient status'''(We don't have to prove it with table or plot it's just not useful)
 - '''Also we should remove the ids. Because there is nothing special for these ids. These are just random variables.'''
@@ -227,8 +223,8 @@ After dropping unnecessary variables which is fully NA and variables that contai
 library(visdat)
 vis_dat(data_new)
 ```
+***
 
-## Missing Value Imputations
 
 #### Now we will fill the numeric NaN variables with the mean of columns.
 
@@ -276,7 +272,7 @@ grid.arrange(p1, p2, nrow=2)
 
 
 
-(#There are still some NaN values in 'tumor_stage'(8) and 'days_to_death'(9). We'll drop them)
+(There are still some NaN values in 'tumor_stage'(8) and 'days_to_death'(9). We'll drop them)
 ```{r}
 sapply(data_new,function(x) sum(is.na(x)))
 vars <- c("tumor_stage", "days_to_death")
@@ -289,16 +285,24 @@ As we can see, we don't have any null values in the dataset anymore.
 gg_miss_var(data_new)
 ```
 
+## 4) Multicollinearity
 
-## 211. bloktan devam.
-
-
-#### It seems that tissue_or_organ_of_origin and site_of_resection_or_biopsy are identical features. We will make sure and if they are identical we'll drop one of them''' (We can improve that part and we can show the identification better.)
+- Let's plot the Correlation Coefficient Matrix for multicollinearity check. But we can apply the Correlation Coefficient Matrix only to numeric columns. Also, we need to check for non-numeric features for multicollinearity. We're going to use a function to check if there are identical columns in the data frame with non-numeric columns. To be able to check for identical features, we're going to print a list that consists of two columns. If a feature has an identical feature second column will show the feature which is identical to the first one.
 ```{r}
-ifelse(data_new$tissue_or_organ_of_origin==data_new$site_of_resection_or_biopsy,"Yes","No")
+matrix <- data_new %>%
+    select_if(is.numeric) %>%
+    cor(.)
+corrplot(matrix, method = "color", addCoef.col="black", order = "alphabet", number.cex=0.6, title = "Correlation Coefficient Matrix",
+         tl.cex=0.6, tl.col = "black")
+
+tt <- lapply(unique(as.list(data_new)), function(x) {colnames(data_new)[as.list(data_new) %in% list(x)]})
+t(sapply(tt, "length<-", max(lengths(tt))))
+```
+*Note*: The above correlation matrix shows that there are no highly correlated features and due to there are no multicollinearity for numeric features. On the other hand, for the non-numeric features it seems that tissue_or_organ_of_origin and site_of_resection_or_biopsy are identical features. Therefore, we're going to drop **tissue_or_organ_of_origin**.
+
+```{r}
 data_new <- subset(data_new, select = -c(tissue_or_organ_of_origin))
 ```
-
 
 
 ## ENCODING
@@ -352,7 +356,7 @@ categorical.cols <- data.frame(predict(dmy, newdata = categorical.cols))
 head(categorical.cols)
 ```
 
-  - We'll drop categorical columns and then we'll merge the new One Hot Encoded version of categrical.cols to the dataset.
+  - We'll drop categorical columns and then we'll merge the new One Hot Encoded version of categorical.cols to the dataset.
 ```{r}
 categorical.cols$submitter_id <- data_new$submitter_id #We need that submitter_id column to merge two dataframes.
 data_new <- subset(data_new, select = -c(primary_diagnosis, morphology, site_of_resection_or_biopsy, race, ethnicity))
@@ -378,6 +382,10 @@ head(data_new)
 str(data_new)
 ```
 
+
+
+## Z.a) Imbalance Check
+
 ## Let's see if we have a balanced classes or not.
 ```{r}
 p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
@@ -386,12 +394,10 @@ p1
 ```
 It seems that we have a serious imbalance class classification problem. 
 ```{r}
-library(caret)
-matrix <- data_new %>%
-    select_if(is.numeric) %>%
-    cor(.)
-corrplot(matrix, method = "color", addCoef.col="black", order = "alphabet", number.cex=0.2, title = "Correlation Coefficient Matrix",
-         tl.cex=0.4, tl.col = "black")
+install.packages('DMwR')
+library(DMwR)
+data_new.imb <- SMOTE(days_to_death ~ ., data_new, perc.over = 100, perc.under=200)
+data_new.imb$days_to_death <- as.numeric(data_new.imb$days_to_death)
 ```
 
 
