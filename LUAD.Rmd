@@ -280,12 +280,14 @@ geom_bar(fill='orange') +  labs(x='Classes', y="")
 p1
 ```
 It seems that we have a serious imbalance class classification problem. 
-
-
-
-
-
-
+```{r}
+library(caret)
+matrix <- data_new %>%
+    select_if(is.numeric) %>%
+    cor(.)
+corrplot(matrix, method = "color", addCoef.col="black", order = "alphabet", number.cex=0.2, title = "Correlation Coefficient Matrix",
+         tl.cex=0.4, tl.col = "black")
+```
 
 
 
