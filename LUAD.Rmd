@@ -395,23 +395,48 @@ p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-l
 geom_bar(fill='orange') +  labs(x='Classes', y="")
 p1
 ```
+Before applying Oversampling algorithm to data let's first split the data into two parts, train(%80) and test(%20) dataset.
+```{r}
+set.seed(123)
+samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
+
+train  <- data_new[samples, ]
+test <- data_new[-samples, ]
+
+paste("Size of training set:",nrow(train),",",ncol(train))
+paste("Size of test set:",nrow(test),",",ncol(test))
+
+
+```
+
+
+
 It seems that we have a serious imbalance class classification problem. We're going to use the SMOTE algorithm, the SMOTE is an oversampling technique which synthesizes a new minority instance between a pair of one minority instance and one of its K nearest neighbor.
 ```{r}
 #install.packages("smotefamily")
 library(smotefamily)
 
-paste("We're going to keep the imbalance data as 'data_new_imbalance'")
+paste("We're going to keep the imbalance data as 'train_imbalance' and 'test_imbalance'")
 
-data_new_imbalance <- data_new
+train_imbalance <- train
+test_imbalance <- test
 
-data_new <- SMOTE(subset(data_new, select = -c(days_to_death)),subset(data_new, select = c(days_to_death)),K=5)
-data_new <- data_new$data
+train <- SMOTE(subset(train, select = -c(days_to_death)),subset(train, select = c(days_to_death)),K=5)
+train <- train$data
 
-names(data_new)[names(data_new) == 'class'] <- 'days_to_death'
+test <- SMOTE(subset(test, select = -c(days_to_death)),subset(test, select = c(days_to_death)),K=5)
+test <- test$data
 
-p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count")
-p1
+
+names(train)[names(train) == 'class'] <- 'days_to_death'
+names(test)[names(test) == 'class'] <- 'days_to_death'
+
+p1 <- ggplot(train, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Train Data")
+p2 <- ggplot(test, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
+geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Test Data")
+require(gridExtra)
+grid.arrange(p1, p2, nrow=2)
 ```
 After applying SMOTE now we have a balanced data. 
 
