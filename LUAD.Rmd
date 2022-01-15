@@ -1,12 +1,14 @@
 ---
 title: "LUAD"
-author: "Cihan"
+author:
+  - Gaye Çolakoğlu^[180709059]
+  - Mehmet Cihan Sakman^[170709001]
 date: "27 12 2021"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 #LIBRARIES
@@ -15,15 +17,12 @@ We first load necessary libraries
 #install.packages("naniar")
 #install.packages("cowplot") 
 #install.packages("superml")
-#install.packages("factoextra")
+#install.packages("VIM")
 #install.packages("smotefamily")
-#install.packages("cvms")
-#install.packages("magrittr") # package installations are only needed the first time you use it
-#install.packages("dplyr")    # alternative installation of the %>%
-library(magrittr) # needs to be run every time you start R and want to use %>%
-library(dplyr) 
-library(cvms)
+#install.packages("AICcmodavg")
 library(factoextra)
+library(pROC)
+library(AICcmodavg)
 library(smotefamily)
 library(cluster)
 library(VIM)
@@ -41,14 +40,14 @@ library(caret) #dummyVars for One Hot Encoding
 ```{r}
 missing.values <- c("N/A","na","?","", "NaN", "not reported", "NA")
 
-#data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+data <- read.csv("C:\\Users\\sakma\\Desktop\\Ders Kayıtları\\Data Mining\\Final Project\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
-data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
+#data <- read.csv("C:\\Users\\Gaye\\OneDrive\\Masaüstü\\dersKayıtü\\DataScience\\DataScienceFinal\\TCGA-LUAD_clinical.csv", na.strings=missing.values)
 
 ```
 
-## 1.2.3) Data Analysis and Visualization **We should give some information about data....**
-```{r cars}
+## **1.2.3)** Data Analysis and Visualization
+```{r }
 summary(data)
 ```
 
@@ -72,34 +71,37 @@ As we can see from the table, we have many NA values, but some variables look fu
 
 # PREPROCESSING
 
-## At this step firstly we're going to drop the fully NaN columns. Because these columns are not useful for us. Maybe we can show these full nan columns in a fashionable way.
+At this step firstly we're going to drop the fully NaN columns. Because these columns are not useful for us. Maybe we can show these full nan columns in a fashionable way.
 
 **we are going to get a rough glimpse on the missingness situation with the pretty neat naniar package**
 
-**Note:** we can go through https://towardsdatascience.com/smart-handling-of-missing-data-in-r-6425f8a559f2 and leave some comments for our dataset.
+Are there missing values in the dataset?
 ```{r}
-# Are there missing values in the dataset?
 any_na(data)
 ```
-
+How many?
 ```{r}
-# How many?
+
 n_miss(data)
-prop_miss(data)
 
 ```
 
+What is the proportion of missing data?
 ```{r}
+prop_miss(data)
+```
 
 # Which variables are affected?
+```{r}
 data %>% is.na() %>% colSums()
 
 ```
 
+Drop full NA variables and append the new data frame to the data_new and take a look our new dataframe
 ```{r}
-# Drop full NA variables and append the new data frame to the data_new
+
 data_new <- data[ , colSums(is.na(data)) < nrow(data)]
-# Take a look our new dataframe
+
 summary(data_new)
 
 ```
@@ -109,24 +111,23 @@ Let's take a closer look at to the missing values with tables.
 ```{r}
 # Get number of missings per variable (n and %)
 miss_var_summary(data_new)
-#miss_var_table(data)
 
 ```
 
-By looking at missing summary per variable, we notice that especially the “year_of_death”-Variable has the highest amount of missings among all variables in the dataset. The variable represents the “year of death of individuals.” 
+By looking at missing summary per variable, we notice that especially the “year_of_death” variable has the highest amount of missings among all variables in the dataset. The variable represents the “year of death of individuals.” 
 
 We can transfer this summary to a visual representation like this:
-
 ```{r}
 # Which variables contain the most missing variables?
 gg_miss_var(data_new)
 ```
 
-To get a better understanding whether or not the data are missing at random, we are going to visualize the locations of missing values across all variables.
+To get a better understanding we are going to visualize the locations of missing values across all variables.
 ```{r}
 # Where are missings located?
 vis_miss(data_new) + theme(axis.text.x = element_text(angle=80))
 ```
+
 We can see where the missing values are “clustered” and it seems to match our findings from our previous overview on the presence of missing values per variable.
 
 We can see that the presence of some values in some variables coincides with the absence of others. We can see the *days_to_last_follow_up* and *days_to_death* columns that are an example of missing with the existence of others.
@@ -136,6 +137,7 @@ Now is the presence of some values are related with missingness in other variabl
 ```{r}
 gg_miss_upset(data_new)
 ```
+
 The results are compatible with the observation that there is a substantial number of cases in which some missingness happen to occur across certain variables.
 
 From above result we can say that **There is a direct realtionship between *days_to_last_follow_up* and *days_to_death* columns**. Of course, there are other variables that meet this condition. But the binary that stood out compared to the numeric values was *days_to_last_follow_up* and *days_to_death*.
@@ -201,33 +203,37 @@ From above plot we can say that the 63.1% of the missing values in **days_to_dea
 - Now, Now we'll fill the NaN values in days_to_death column with the days_to_last_follow_up. Subsequently, we're going to drop the days_to_last_follow_up.
 ```{r}
 data_new$days_to_death[is.na(data_new$days_to_death)] <- data_new$days_to_last_follow_up[is.na(data_new$days_to_death)]  # Replace NA values
+data$days_to_death[is.na(data$days_to_death)] <- data$days_to_last_follow_up[is.na(data$days_to_death)]  # Replace NA values 
+
 
 #Drop the days_to_last_follow_up.
 data_new <- subset(data_new, select = -c(days_to_last_follow_up))
-gg_miss_upset(data_new)
+data <- subset(data, select = -c(days_to_last_follow_up))
+gg_miss_var(data_new)
 ```
+
 As we can see we successfully merge these two features.
 
 ***
 
-- '''We can drop year_of_birth column because we already have days_to_birth which is more suitable for our algorithm'''
+- We can drop year_of_birth column because we already have days_to_birth which is more suitable for our algorithm
 
-- '''In 'state' column all the variables are same for all rows as 'released'. We'll drop it''' (*SHOW THAT*)
-
+- In 'state' column all the variables are same for all rows as 'released'. We'll drop it
 ```{r}
 #unique_data <- sapply(data_new, function(x) length(unique(x)))
 unique_data <- data_new %>% summarise_each(funs(n_distinct))
 unique_data
 ```
 
-- '''Drop updated_datetime because there is no special information about patient status'''(We don't have to prove it with table or plot it's just not useful)
-- '''Also we should remove the ids. Because there is nothing special for these ids. These are just random variables.'''
+- Drop updated_datetime because there is no special information about patient status
+
+- Also we should remove the ids. Because there is nothing special for these ids. These are just random variables.
   - id_columns = {"diagnosis_id", "exposure_id", "demographic_id", "treatment_id", "bcr_patient_barcode"}
+  
 - 76% of the year_of_death column is missing. We're going to drop that column because we already have the information of days_to_death which refers to information of lifetime of the patient before dying. 
-
-
 ```{r}
 data_new <- subset(data_new, select = -c(year_of_birth, state, updated_datetime, diagnosis_id, exposure_id, demographic_id, treatment_id, bcr_patient_barcode, year_of_death))
+data <- subset(data, select = -c(year_of_birth, state, updated_datetime, diagnosis_id, exposure_id, demographic_id, treatment_id, bcr_patient_barcode, year_of_death,submitter_id))
 ```
 
 After dropping unnecessary variables which is fully NA and variables that contain only the same values, this is our last version of data.
@@ -241,9 +247,7 @@ vis_dat(data_new)
 
 #### Now we will fill the numeric NaN variables with the mean of columns.
 
-- numeric_columns = {"age_at_diagnosis", "days_to_birth","years_smoked","cigarettes_per_day"}
-**Note:** We can show the missing values with dot plot and after imputing the data we can do the same thing again for all 4 features.
-**Note:** We can also try to fill the missing values after splitting test and train data and impute the missing values separately for test and train data.
+- numeric_columns: *age_at_diagnosis*, *days_to_birth*, *years_smoked*, *cigarettes_per_day*
 ```{r}
 ## Try to do the same operation with less code. Try sth fancy.
 data_new$age_at_diagnosis[is.na(data_new$age_at_diagnosis)] <- mean(data_new$age_at_diagnosis, na.rm = TRUE)
@@ -257,7 +261,7 @@ gg_miss_var(data_new)
 
 We can see that we successfully imputed these features with mean of the features.
 
-- '''Now we have null values in **ethnicity** and **race** columns. These columns are highly related with cancer genetic we will keep them as unknown'''
+- Now we have null values in **ethnicity** and **race** columns. These columns are highly related with cancer genetic we will keep them as unknown
 ```{r}
  
 head(data_new)
@@ -311,7 +315,7 @@ corrplot(matrix, method = "color", addCoef.col="black", order = "alphabet", numb
 tt <- lapply(unique(as.list(data_new)), function(x) {colnames(data_new)[as.list(data_new) %in% list(x)]})
 t(sapply(tt, "length<-", max(lengths(tt))))
 ```
-*Note*: The above correlation matrix shows that there are no highly correlated features and due to there are no multicollinearity for numeric features. On the other hand, for the non-numeric features it seems that tissue_or_organ_of_origin and site_of_resection_or_biopsy are identical features. Therefore, we're going to drop **tissue_or_organ_of_origin**.
+**Note**: The above correlation matrix shows that there are no highly correlated features and due to there are no multicollinearity for numeric features. On the other hand, for the non-numeric features it seems that tissue_or_organ_of_origin and site_of_resection_or_biopsy are identical features. Therefore, we're going to drop *tissue_or_organ_of_origin*.
 
 ```{r}
 data_new <- subset(data_new, select = -c(tissue_or_organ_of_origin))
@@ -391,6 +395,9 @@ data_new$days_to_death <- ifelse(data_new$days_to_death>1825, 'low risk', 'high 
 data_new$days_to_death <- as.factor(data_new$days_to_death)
 head(data_new)
 str(data_new)
+
+data$days_to_death <- ifelse(data$days_to_death>1825, 0, 1)
+data$days_to_death <- as.factor(data$days_to_death)
 ```
 
 
@@ -405,29 +412,29 @@ geom_bar(fill='orange') +  labs(x='Classes', y="")
 p1
 ```
 
-Firstly, we set a seed value to keep randomness always the same
+It seems that we have a serious imbalance class classification problem. We're going to use the SMOTE algorithm, the SMOTE is an oversampling technique which synthesizes a new minority instance between a pair of one minority instance and one of its K nearest neighbor.
 ```{r}
-set.seed(12345)
-```
+paste("We're going to keep the imbalance data as 'imbalance_data' and 'data_new' is going to be our balanced data.")
 
-Let's applying Oversampling algorithm to data.
-```{r}
-#We're going to keep the imbalance data as 'imbalance_data' and 'data_new' is going to be our balanced data.
 imbalance_data <- data_new
 
-#Apply Oversampling to data_new in order to get balanced data
+
 data_new <- SMOTE(subset(data_new, select = -c(days_to_death)),subset(data_new, select = c(days_to_death)),K=5)$data
+
+
 
 names(data_new)[names(data_new) == 'class'] <- 'days_to_death'
 
-#Plot the result
+set.seed(12345)
 p1 <- ggplot(data_new, aes(x=reorder(days_to_death, days_to_death, function(x)-length(x)))) +
-geom_bar(fill='orange') +  labs(x='Classes(0: live < 5 years, 1: live > 5 years)', y="Count") + ggtitle("Balanced Data")
+geom_bar(fill='orange') +  labs(x='Classes', y="Count") + ggtitle("Balanced Data")
 p1
 ```
+
 After applying SMOTE now we have a balanced data. 
 
 ## 5) PCA
+
 First, we apply PCA keeping all components equal to the original number of dimensions and see how well PCA captures the variance of our data.
 ```{r}
 X_data <- subset(data_new, select = -c(days_to_death))
@@ -436,11 +443,6 @@ y_data <- subset(data_new, select = c(days_to_death)) # our target
 #Now we can apply PCA:
 X_data_pca <- prcomp(X_data,center = TRUE, scale. = TRUE)
 summary(X_data_pca)
-
-#We are going to apply same step for X test:
-#which(apply(X.test, 2, var)==0)
-#X.test <- X.test[ , which(apply(X.test, 2, var) != 0)]
-#X.test.pca <- prcomp(X.test,center = TRUE, scale. = TRUE)
 
 ```
 
@@ -454,9 +456,10 @@ legend("topright", legend=c("Eigenvalue = 1"),
        col=c("red"), lty=5, cex=0.6)
 
 ```
+
 As you see above we have a line which name is Eigenvalue we can say eigenvalue is the standard deviation of our PC’s and we just take the first 20 PC’s which their eigenvalues greater than 1.
 
-The above plot shows the bend at the eighteenth principal component, it is useful to decide how many PCs to retain for further analysis. In this case we have 20 PCs and we can see that the first 20 PCs explain most of the variability in the data.
+The above plot shows the bend at the eighteenth principal component, it is useful to decide how many PCs to retain for further analysis. In this case we have 18 PCs and we can see that the first 18 PCs explain most of the variability in the data.
 
 ```{r}
 cumpro <- cumsum(X_data_pca$sdev^2 / sum(X_data_pca$sdev^2))
@@ -466,6 +469,7 @@ abline(h = 0.89271, col="blue", lty=5)
 legend("topleft", legend=c("Cut-off @ PC6"),
        col=c("blue"), lty=5, cex=0.6)
 ```
+
 From above plot we can see that nearly with 20 PCs we can explain %89.271 of total variance.
 
 Let's see the importance of first 20 PCs out of 42:
@@ -473,6 +477,7 @@ Let's see the importance of first 20 PCs out of 42:
 X_data_pca_20 <- prcomp(subset(X_data), center = TRUE, scale = TRUE, rank.= 20)
 summary(X_data_pca_20)
 ```
+
 From above summary, let's look at the cumulative proportion of PC20. It's value is 0.89 which means that we can explain %0.89 of total variance with 20 PCs out of 42.
 
 Now lets look at correlation again.
@@ -482,14 +487,15 @@ corrplot(M, method = "color", addCoef.col="brown", order = "FPC", number.cex=0.9
          tl.cex=0.7, tl.col = "brown", tl.srt = 90)
 
 ```
+
 As you see above there is no correlation between our PC’s.That’s what we have wanted.
 
-
-Now we keep new data with name 'transformed_data' which have fewer columns to create a more powerful model.
+Now we'll keep new data with name 'transformed_data' which have fewer columns to create a more powerful model
 ```{r}
 transformed_data<- cbind(X_data_pca_20$x,y_data)
 head(transformed_data)
 ```
+
 ## 6) LOGISTIC REGRESSION
 ```{r}
 training_samples <- data_new$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
@@ -506,20 +512,21 @@ test_data <- data_new[-training_samples, ]
 model <- glm(days_to_death ~.,family=binomial,data=train_data)
 
 #Let’s see what it can be able to our model?
-fitted.results <- predict(model,subset(test_data,select=-c(days_to_death)),type='response')
-fitted.results <- ifelse(fitted.results > 0.5,1,0)
+fitted_results <- predict(model,subset(test_data,select=-c(days_to_death)),type='response')
+fitted_results <- ifelse(fitted_results > 0.5,1,0)
 
-confusionMatrix(test_data$days_to_death,as.factor(fitted.results))
+confusionMatrix(test_data$days_to_death,as.factor(fitted_results))
 
-misClasificError <- mean(fitted.results != test_data$days_to_death)
+misClasificError <- mean(fitted_results != test_data$days_to_death)
 
 print(paste('Test Accuracy:',1-misClasificError))
 
 
 ```
-As you see above model accuracy is 74 %. It is good but let's see if we can increase this ratio with PCA dataset(transformed data) which we created above.
 
-## 6.X) LOGISTIC REGRESSION WTIH PCA(*Galiba çalışmıyor kontrol et*)
+As you see above model accuracy is 67%. It is good but let's see if we can increase this ratio with PCA dataset(transformed data) which we created above.
+
+## 6.X) LOGISTIC REGRESSION WTIH PCA
 
 Let's create new model but this time with PCA then we are going to compare the result with model that that is created at step 6.
 ```{r}
@@ -537,43 +544,49 @@ test_data_pca <- transformed_data[-training_samples_pca, ]
 model_pca <- glm(days_to_death ~.,family=binomial,data=train_data_pca)
 
 #Let’s see what it can be able to our model?
-fitted_results <- predict(model_pca,subset(test_data_pca,select=-c(days_to_death)),type='response')
-fitted.results <- ifelse(fitted.results > 0.5,1,0)
+fitted_results_pca <- predict(model_pca,subset(test_data_pca,select=-c(days_to_death)),type='response')
+fitted_results_pca <- ifelse(fitted_results_pca > 0.5,1,0)
 
-confusionMatrix(test_data_pca$days_to_death,as.factor(fitted.results))
+confusionMatrix(test_data_pca$days_to_death,as.factor(fitted_results_pca))
 
-misClasificError <- mean(fitted.results != test_data_pca$days_to_death)
+misClasificError_pca <- mean(fitted_results_pca != test_data_pca$days_to_death)
 
-print(paste('Test Accuracy:',1-misClasificError))
+print(paste('Test Accuracy:',1-misClasificError_pca))
 ```
 
+# Compare result of 6 and 6.X:
 
+**Result** From above result we can see that the model_pca accuracy is 74% while model accuracy is 68%. Also we can say that the model with applying PCA is more useful than the model without PCA in our data analysis.
 
-## 6.Y.b) LOGISTIC REGRESSION WTIH MISSING VALUES (*ERROR*)
+## 6.Y.b) LOGISTIC REGRESSION WTIH MISSING VALUES
 This time we want to create our model with missing values then we are going to compare the result with model that do not contain missing values which is created at step 6.
 ```{r}
+#library(rpart)
+#install.packages("rpart.plot")
+#library(rpart.plot)
+
 #training_samples_missing <- data$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
 
 #Then we split our data into train and test data.
 #train_data_missing  <- data[training_samples_missing, ]
 #test_data_missing <- data[-training_samples_missing, ]
 
-#Now we can build our linear regression model with our data
-#model_missing <- glm(days_to_death ~.,family=binomial,data=train_data_missing)
+#model_missing <- rpart(days_to_death ~., data = train_data_missing, cp=0.07444)
 
 #Let’s see what it can be able to our model?
-#fitted_results <- predict(model_missing,subset(test_data_missing,select=-c(days_to_death)),type='response')
-#fitted.results <- ifelse(fitted.results > 0.5,1,0)
+#fitted_results_missing <- predict(model_missing,subset(test_data_missing,select=-c(days_to_death)),type='response') 
+```
+**Note:** It doesn't work with data because we didn't compute the Encoding steps for the data with NA values.....
 
-#confusionMatrix(test_data_missing$days_to_death,as.factor(fitted.results))
+# Compare result of 6 and 6.Y.b:
+```{r}
+#models <- list(model, model_missing)
 
-#misClasificError <- mean(fitted.results != test_data_missing$days_to_death)
-
-#print(paste('Test Accuracy:',1-misClasificError))
-
+#model.names <- c('model', 'model_missing')
+#aictab(cand.set = models, modnames = model.names)
 ```
 
-## 6.Z.b) LOGISTIC REGRESSION WTIH IMBALANCED
+## 6.Z.b) LOGISTIC REGRESSION WTIH IMBALANCED DATA
 Let's also create our model with imbalanced data then we are going to compare the result with model that contain balanced data which is created at step 6.
 ```{r}
 training_samples_imbalance <- imbalance_data$days_to_death %>% createDataPartition(p = 0.8, list = FALSE)
@@ -590,22 +603,56 @@ test_data_imbalance <- imbalance_data[-training_samples_imbalance, ]
 model_imbalance <- glm(days_to_death ~.,family=binomial,data=train_data_imbalance)
 
 #Let’s see what it can be able to our model?
-fitted_results <- predict(model_imbalance,subset(test_data_imbalance,select=-c(days_to_death)),type='response')
-fitted.results <- ifelse(fitted.results > 0.5,1,0)
+fitted_results_imbalance <- predict(model_imbalance,subset(test_data_imbalance,select=-c(days_to_death)),type='response')
+fitted_results_imbalance <- ifelse(fitted_results_imbalance > 0.5,1,0)
 
-#confusionMatrix(test_data_missing$days_to_death,as.factor(fitted.results))
+confusionMatrix(test_data_imbalance$days_to_death,as.factor(fitted_results_imbalance))
 
-misClasificError <- mean(fitted.results != test_data_imbalance$days_to_death)
+misClasificError_imbalance <- mean(fitted_results_imbalance != test_data_imbalance$days_to_death)
 
-print(paste('Test Accuracy:',1-misClasificError))
+print(paste('Test Accuracy:',1-misClasificError_imbalance))
 
 ```
 
-## *7)* Clustering Algorithms
+Despite the accuracy being 90%, the Sensitivity is 50%. That means our algorithm only predicts the patients with High Risk. It can not predict the Low-Risk patient well. As you can see from the confusion matrix it correctly classified only one patient out of ten which is a Low-Risk patient.
 
-- *a)* Clustering is powerful technique when it's about unsupervised learning. Some of the clustering algorithms directly clusters the data points without any given information but some of them need to have the information of number of clusters. In order to show the difference between these two type clustering we're going to apply K-means and Hierarchical Clustering Algorithms. 
+# Compare result of 6 and 6.Z.b:
 
-- *7.1)* KNN Clustering
+We fitted the imbalanced data with Logistic Regression and using the Accuracy is not a good metrics for measuring the algorithm's success on the imbalance data. Therefore we're going to plot the ROC curve(AUC) to show the success of the algorithm.
+```{r}
+fitted_results_imbalance <- predict(model_imbalance, subset(test_data_imbalance,select=-c(days_to_death)),type='response')
+auc <- roc(test_data_imbalance$days_to_death, fitted_results_imbalance)
+print(auc)
+p1 <- plot(auc, ylim=c(0,1), print.thres=TRUE, main=paste('AUC:',round(auc$auc[[1]],2)))
+abline(h=1,col='blue',lwd=2)
+abline(h=0,col='red',lwd=2)
+#models <- list(model, model_imbalance)
+
+#model.names <- c('model', 'model_imbalance')
+#aictab(cand.set = models, modnames = model.names)
+```
+
+As we can see from above the AUC is 0.66 which is a really bad result. Now let's plot the AUC for the balanced data and see if the SMOTE improved the performance of the algorithm or not.
+```{r}
+fitted_results <- predict(model,subset(test_data,select=-c(days_to_death)),type='response')
+auc <- roc(test_data$days_to_death, fitted_results)
+print(auc)
+p1 <- plot(auc, ylim=c(0,1), print.thres=TRUE, main=paste('AUC:',round(auc$auc[[1]],2)))
+abline(h=1,col='blue',lwd=2)
+abline(h=0,col='red',lwd=2)
+```
+
+Applying the SMOTE algorithm to our data improved the Logistic Regression's performance from 0.66 to 0.77. It proves the power of the OverSampling with SMOTE.
+
+Based on this comparison, we would choose the balanced data to use in our data analysis.
+
+***
+
+## **7)** Clustering Algorithms
+
+- **a)** Clustering is powerful technique when it's about unsupervised learning. Some of the clustering algorithms directly clusters the data points without any given information but some of them need to have the information of number of clusters. In order to show the difference between these two type clustering we're going to apply K-means and Hierarchical Clustering Algorithms. 
+
+- **7.1)** KNN Clustering
 
 Let's first try to show the distribution of the days_to_death using **cigarettes_per_day** and **years_smoked**
 ```{r}
@@ -658,10 +705,7 @@ table(kmeans_data$cluster, y_data$days_to_death)
 ```
 **Note**: As we can see from the above clustering algorithms didn't predict well. For the low risk, the algorithm almost has 50% accuracy and it means nothing for the Machine Learning algorithm. Rather than using that algorithm we can just flip a coin and decide whether it's low or high risk.
 
-
-
-
-- *7.2)* HIERARCHICAL CLUSTERING(HC)
+- **7.2)** HIERARCHICAL CLUSTERING(HC)
 
 Let's plot the elbow method and see what is suggested number of clusters. 
 ```{r}
@@ -672,6 +716,7 @@ distance <- dist(subset(data_new, select = -c(days_to_death)), method="euclidean
 fviz_nbclust(subset(data_new, select = -c(days_to_death)), FUN = hcut, method = "wss")
 
 ```
+
 It seems that we should try to have three clusters. Let's plot the dendogram tree. The height of the cut to the dendrogram controls the number of clusters obtained and we're going to try to cut the tree with different heights. Let's first cut it into 2 clusters.
 ```{r}
 hier <- hclust(distance, method="average")
@@ -703,21 +748,22 @@ rect.hclust(hier, k=4, border="red")
 hier_cut <- cutree(hier, 4)
 table(predicted=hier_cut, true=data_new$days_to_death)
 ```
+
 It seems that increasing the number of clusters doesn't work anymore. Because the new cluster only consists of one individual and it doesn't mean anything to us.
 
 **Result:** We can not identify the target classes well with Hierarchical Clustering algorithm. It can correctly classify almost *66%* of the class 1 but it didn't work well for the class 0. 
 
-- *b)* In this situation comparing these two Clustering algorithms doesn't make sense because the selected two algorithms couldn't come up with good classification accuracies too. But we can say that Hierarchical Clustering did a better job of predicting Class 1 than K-means. But both of them could not identify Class 0 well.
+- **b)** In this situation comparing these two Clustering algorithms doesn't make sense because the selected two algorithms couldn't come up with good classification accuracies too. But we can say that Hierarchical Clustering did a better job of predicting Class 1 than K-means. But both of them could not identify Class 0 well.
 
 ***
 
-## *8*) Apply at least 2 Classification Techniques
+## **8**) Apply at least 2 Classification Techniques
 
-- *a)* We're going to apply the two popular classifying algorithms, Random Forest and Logistic Regression. We choose the Random Forest because it handles the overfitting if it exists very well and also deals with a large number of features. Due to we have 45 features we'll use the Random Forest's power for our benefit. Logistic Regression is very easy to use and it suits the binary class classification problems which we are dealing with. Logistic Regression works a bit faster than other classification algorithms. Due to our having balanced data, we're going to check the Accuracy which is basically the ratio of correct classified classes to total classes.
+- **a)** We're going to apply the two popular classifying algorithms, Random Forest and Logistic Regression. We choose the Random Forest because it handles the overfitting if it exists very well and also deals with a large number of features. Due to we have 45 features we'll use the Random Forest's power for our benefit. Logistic Regression is very easy to use and it suits the binary class classification problems which we are dealing with. Logistic Regression works a bit faster than other classification algorithms. Due to our having balanced data, we're going to check the Accuracy which is basically the ratio of correct classified classes to total classes.
 
-- *8.1)* Logistic Regression: We have already applied the Logistic Regression in **Step 6** then we can move forward with step 8.2.
+- **8.1)** Logistic Regression: We have already applied the Logistic Regression in **Step 6** then we can move forward with step 8.2.
 
-- *8.2)* Random Forest: We're going to apply the powerful classifying algorithm Random Forest to try to predict whether the patient is a high risk or low risk.
+- **8.2)** Random Forest: We're going to apply the powerful classifying algorithm Random Forest to try to predict whether the patient is a high risk or low risk.
 
 - We'll first fit and train our data with 500 trees which is default for Random Forest Algorithm and then we'll increase the number of trees and try to observe the change on the accuracy. 
 ```{r}
@@ -726,7 +772,7 @@ rf <- randomForest(days_to_death~., data=train_data, proximity=TRUE, ntree = 500
 print(rf)
 ```
 
-Our out of bag(OOB) error is 4.93%, so the train data set model accuracy is around 95%.
+Our out of bag(OOB) error is 5%, so the train data set model accuracy is around 95%.
 
 Now let's make a prediction with the train_data and see the performance.
 ```{r}
@@ -740,7 +786,7 @@ p1 <- predict(rf, test_data)
 confusionMatrix(p1, test_data$days_to_death)
 ```
 
-We have a very high accuracy with test data with 91.8%. 
+We have a very high accuracy with test data with 94%. 
 
 - Now let's plot the top 10 most important features and see the effects of them.
 ```{r}
@@ -749,6 +795,7 @@ varImpPlot(rf,
            n.var = 10,
            main = "Top 10 - Variable Importance")
 ```
+
 It seems that the *ethnicity* column is the most important feature for the Random Forest algorithm.
 
 - Now try to increase the number of trees from 500 to 1000 in the Random Forest and see the changes in the accuracy.
@@ -757,9 +804,10 @@ rf <- randomForest(days_to_death~., data=train_data, proximity=TRUE, ntree = 100
 p1 <- predict(rf, test_data)
 confusionMatrix(p1, test_data$days_to_death)
 ```
-After increasing the number of trees from 500 to 1000 there is an improvement on the algorithm from *91.8%* to *92.4%*. This means that we can correctly classify the 6 people more among 1000 patients. In real life, it means a lot and we succeeded that by just increasing the number of trees.
 
-- *b)* We have *74.2%* Accuracy in Logistic Regression and *92.4%* with Random Forest. There is a huge difference between these two algorithms. Due to we have a large number of features and Random Forest is a little bit more sophisticated algorithm that could be why we have much better accuracy with Random Forest compared to Logistic Regression.
+After increasing the number of trees from 500 to 1000 we couldn't improve the accuracy.
+
+- **b)** We have *74%* Accuracy in Logistic Regression and *94%* with Random Forest. There is a huge difference between these two algorithms. Due to we have a large number of features and Random Forest is a little bit more sophisticated algorithm that could be why we have much better accuracy with Random Forest compared to Logistic Regression.
 
 
 
