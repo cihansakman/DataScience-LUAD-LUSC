@@ -597,7 +597,7 @@ Due to we imputed to null values with mean values of the feature in **years_smok
 
 We are going to assign the # of clusters to 2 to identify the **high risk** and **low risk** patients.
 
-- We’re going to seperate the target(days_to_death) before applying k-means.
+- We’re going to separate the target(days_to_death) before applying k-means.
 ```{r}
 x_data <- subset(data_new, select = -c(days_to_death))
 y_data <- subset(data_new, select = c(days_to_death))
@@ -605,6 +605,29 @@ y_data <- subset(data_new, select = c(days_to_death))
 kmeans_data <- kmeans(x_data, center=2, nstart=30)
 #kmeans_data$centers
 ```
+
+Let's try to visualize the clusters on the CigarettesPerDay vs YearsSmoked plot.
+```{r}
+## Visualizing clusters
+y_kmeans <- kmeans_data$cluster
+clusplot(x_data[, c("cigarettes_per_day", "years_smoked")],
+         y_kmeans,
+         lines = 0,
+         shade = TRUE,
+         color = TRUE,
+         labels = 2,
+         plotchar = FALSE,
+         span = TRUE,
+         main = paste("Cluster Risk Levels"),
+         xlab = 'Years Smoked',
+         ylab = 'Cigarettes Per Day')
+```
+It could not identify the clusters well according to CigarettesPerDay and YearsSmoked. Let's try to plot clusters and see if we can find out anything.
+```{r}
+fviz_cluster(kmeans_data, data = x_data)
+```
+As we can see again due to our classes generated synthetically with SMOTE algorithm the classes are so close to each others and clustering algorithm suffers to identify bounds of the classes.
+
 - Now let's compare the predicted values and actual values
 ```{r}
 #install.packages("cvms")
@@ -612,39 +635,67 @@ library(cvms)
 library(factoextra)
 
 table(kmeans_data$cluster, y_data$days_to_death)
-
 ```
 **Note**: As we can see from the above clustering algorithms didn't predict well. For the low risk, the algorithm almost has 50% accuracy and it means nothing for the Machine Learning algorithm. Rather than using that algorithm we can just flip a coin and decide whether it's low or high risk.
 
+
+
+
 - *7.2)* HIERARCHICAL CLUSTERING(HC)
 
+Let's plot the elbow method and see what is suggested number of clusters. 
 ```{r}
 #Agglomerative hierarchical clustering (HC)---hclust function
 distance <- dist(subset(data_new, select = -c(days_to_death)), method="euclidean") 
 #Elbow method can also be used here
+
 fviz_nbclust(subset(data_new, select = -c(days_to_death)), FUN = hcut, method = "wss")
 
 ```
-
+It seems that we should try to have three clusters. Let's plot the dendogram tree. The height of the cut to the dendrogram controls the number of clusters obtained and we're going to try to cut the tree with different heights. Let's first cut it into 2 clusters.
 ```{r}
 hier <- hclust(distance, method="average")
 plot(hier,  xlab="", sub=" ") 
-rect.hclust(hier, k=3, border="red")
+rect.hclust(hier, k=2, border="red")
 ```
 
 ```{r}
 hier_cut <- cutree(hier, 2)
 table(predicted=hier_cut, true=data_new$days_to_death)
 ```
+With the number of two clusters it can not identify the clusters well as we can see it also from the dendogram and we could have more clusters.
+
+Let's try it for three clusters.
 ```{r}
+
+plot(hier,  xlab="", sub=" ") 
+rect.hclust(hier, k=3, border="red")
+
 hier_cut <- cutree(hier, 3)
 table(predicted=hier_cut, true=data_new$days_to_death)
 ```
-## *8*) Apply at least 2 Classification Techniques(Logistic Regression and Random Forest)
 
-- *a)* We're going to apply the two popular classifying algorithms Random Forest and Logistic Regression. We choose the Random Forest because it handles the overfitting if it exists very well and also deals with a large number of features. Due to we have 45 features we'll use the Random Forest's power for our benefit. Logistic Regression is very easy to use and it suits the binary class classification problems which we are dealing with. Logistic Regression works a bit faster than other classification algorithms. Due to our having balanced data, we're going to check the Accuracy which is basically the ratio of correct classified classes to total classes.
+Now from one of the clusters identfy the class 1 much better than before. Let's try it with 4 cluster.
+```{r}
+plot(hier,  xlab="", sub=" ") 
+rect.hclust(hier, k=4, border="red")
 
-- *8.1)* Logistic Regression: We have already apply the Logistic Regression in **Step 6** then we can move forward with step 8.2.
+hier_cut <- cutree(hier, 4)
+table(predicted=hier_cut, true=data_new$days_to_death)
+```
+It seems that increasing the number of clusters doesn't work anymore. Because the new cluster only consists of one individual and it doesn't mean anything to us.
+
+**Result:** We can not identify the target classes well with Hierarchical Clustering algorithm. It can correctly classify almost *66%* of the class 1 but it didn't work well for the class 0. 
+
+- *b)* In this situation comparing these two Clustering algorithms doesn't make sense because the selected two algorithms couldn't come up with good classification accuracies too. But we can say that Hierarchical Clustering did a better job of predicting Class 1 than K-means. But both of them could not identify Class 0 well.
+
+***
+
+## *8*) Apply at least 2 Classification Techniques
+
+- *a)* We're going to apply the two popular classifying algorithms, Random Forest and Logistic Regression. We choose the Random Forest because it handles the overfitting if it exists very well and also deals with a large number of features. Due to we have 45 features we'll use the Random Forest's power for our benefit. Logistic Regression is very easy to use and it suits the binary class classification problems which we are dealing with. Logistic Regression works a bit faster than other classification algorithms. Due to our having balanced data, we're going to check the Accuracy which is basically the ratio of correct classified classes to total classes.
+
+- *8.1)* Logistic Regression: We have already applied the Logistic Regression in **Step 6** then we can move forward with step 8.2.
 
 - *8.2)* Random Forest: We're going to apply the powerful classifying algorithm Random Forest to try to predict whether the patient is a high risk or low risk.
 
@@ -669,17 +720,18 @@ p1 <- predict(rf, test_data)
 confusionMatrix(p1, test_data$days_to_death)
 ```
 
-We have a very high accuracy with test data with 91.8%. Now let's plot the top 10 most important features and see the affects of them.
+We have a very high accuracy with test data with 91.8%. 
+
+- Now let's plot the top 10 most important features and see the effects of them.
 ```{r}
 varImpPlot(rf,
            sort = T,
            n.var = 10,
            main = "Top 10 - Variable Importance")
-importance(rf)
 ```
 It seems that the *ethnicity* column is the most important feature for the Random Forest algorithm.
 
-- Now try to increase the number of trees in the Random Forest and see the changes in the accuracy.
+- Now try to increase the number of trees from 500 to 1000 in the Random Forest and see the changes in the accuracy.
 ```{r}
 rf <- randomForest(days_to_death~., data=train_data, proximity=TRUE, ntree = 1000)
 p1 <- predict(rf, test_data)
